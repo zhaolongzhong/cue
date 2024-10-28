@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from .llm import LLMClient
 from .memory.memory import InMemoryStorage
+from .reasoning.reasoning_system import ReasoningCore
 from .schemas import (
     AgentConfig,
     AgentHandoffResult,
@@ -43,6 +44,7 @@ class Agent:
         self.other_agents_info = ""
         self.tool_json = None
         self.conversation_context: Optional[ConversationContext] = None  # current conversation context
+        self.reasoner = ReasoningCore()
 
     def get_system_message(self) -> MessageParam:
         instruction = f"\n\n* Your id or name is {self.config.id}."
@@ -97,6 +99,14 @@ class Agent:
             # chat_with_agent is added later so we cannot initialize in init
             self.tool_json = self.tool_manager.get_tool_definitions(self.config.model.id, self.config.tools)
         messages = self.get_message_params()  # convert message params
+        if author:
+            try:
+                last_message = messages[-1]
+                context = self.get_recent_contenxt(4)
+                result = await self.reasoner.reasoning(last_message.content, context)
+                logger.debug(f"reasoning result: {result}")
+            except Exception as e:
+                logger.error(f"Error in thinking: {str(e)}")
         logger.debug(f"{self.id}, size: {len(messages)}")
         history = [
             msg.model_dump() if hasattr(msg, "model_dump") else msg.dict() if hasattr(msg, "dict") else msg
@@ -205,15 +215,12 @@ class Agent:
         else:
             return ToolMessageParam(tool_call_id=tool_id, name=tool_name, role="tool", content=error_message)
 
-    def build_next_agent_context(self, to_agent_id: str, message: str) -> List[Dict]:
+    def build_next_agent_context(self, to_agent_id: str, message: str, max_messages: int = 10) -> List[Dict]:
         history = copy.deepcopy(self.get_messages())
         # remove the transfer tool call and append message from calling agent
         # in this way, we keep the conversation cohensive with less noise
-        max_messages = 15
         start_idx = max(0, len(history) - (max_messages + 1))  # -11 to account for the -1 later
         messages = history[start_idx:-1]
-        messages_content = ",".join([str(msg) for msg in messages])
-
         messages_content = ",".join([str(msg) for msg in messages])
         history = MessageParam(
             role="assistant",
@@ -223,3 +230,14 @@ class Agent:
         messages.append(from_agent_message)
         messages = [history, from_agent_message]
         return messages
+
+    def get_recent_contenxt(self, max_messages: int = 10) -> Optional[str]:
+        if not self.get_messages():
+            return None
+        history = copy.deepcopy(self.get_messages())
+        messages = history[:max_messages]
+        messages_content = ",".join([str(msg) for msg in messages])
+        if not messages_content:
+            return None
+        context = f"<background>{messages_content}</background>"
+        return context

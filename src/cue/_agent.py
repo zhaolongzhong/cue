@@ -22,8 +22,8 @@ from .schemas import (
     AgentConfig,
     RunMetadata,
     MessageParam,
+    AgentTransfer,
     CompletionRequest,
-    AgentHandoffResult,
     CompletionResponse,
     ConversationContext,
     ToolResponseWrapper,
@@ -95,19 +95,11 @@ class Agent:
         description += f" Agent {self.id} is able to use these tools: {', '.join(tool_names)}"
         return description
 
-    def add_tool_to_agent(self, tool: Union[Callable, Tool]) -> None:
-        self.config.tools.append(tool)
-        logger.debug(f"Added tool {tool} to agent {self.config.id}")
-
-    async def chat_with_agent(self, to_agent_id: str, message: str) -> AgentHandoffResult:
-        """Chat with another agent"""
-        messages = self.build_next_agent_context(to_agent_id, message)
-        return AgentHandoffResult(
-            from_agent_id=self.id,
-            to_agent_id=to_agent_id,
-            context=messages,
-            message=message,
-        )
+    def _init_tools(self):
+        if not self.tool_manager:
+            self.tool_manager = self.agent_manager.tool_manager
+        if not self.tool_json and self.config.tools:
+            self.tool_json = self.tool_manager.get_tool_definitions(self.config.model, self.config.tools)
 
     def add_message(self, message: Union[CompletionResponse, ToolResponseWrapper, MessageParam]) -> None:
         self.context.add_message(message)
@@ -126,11 +118,7 @@ class Agent:
             logger.debug(f"System feedback: {self.config.feedback_path}")
 
     async def run(self, author: Optional[Author] = None):
-        if not self.tool_manager:
-            self.tool_manager = self.agent_manager.tool_manager
-        if not self.tool_json and self.config.tools:
-            # chat_with_agent is added later so we cannot initialize in init
-            self.tool_json = self.tool_manager.get_tool_definitions(self.config.model, self.config.tools)
+        self._init_tools()
         messages = self._get_message_params()  # convert message params
         logger.debug(f"{self.id}, size: {len(messages)}")
         history = [
@@ -167,7 +155,7 @@ class Agent:
         )
         response = await self.client.send_completion_request(completion_request)
         record_usage(response)
-        logger.debug(f"Response: {response}")
+        logger.debug(f"{self.id} response: {response}")
         return response
 
     async def process_tools_with_timeout(
@@ -191,8 +179,8 @@ class Agent:
             else:
                 raise ValueError(f"Unsupported tool call type: {type(tool_call)}")
 
-            chat_with_agent = "chat_with_agent"
-            if tool_name not in self.tool_manager.tools and tool_name not in chat_with_agent:
+            create_agent_handoff = "create_agent_handoff"
+            if tool_name not in self.tool_manager.tools and tool_name not in create_agent_handoff:
                 error_message = f"Tool '{tool_name}' not found. {self.tool_manager.tools.keys()}"
                 logger.error(f"{error_message}, tool_call: {tool_call}")
                 tool_results.append(
@@ -204,31 +192,6 @@ class Agent:
                 )
                 continue
 
-            if tool_name == chat_with_agent:
-                # ensure this tool and tool result pair
-                handoff_result = await self.chat_with_agent(**kwargs)
-                if "model" in self.config.model:
-                    tool_result_ = {
-                        "tool_use_id": tool_id,
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Called chat_with_agent successfully",
-                            }
-                        ],
-                        "type": "tool_result",
-                        "is_error": False,
-                    }
-                else:
-                    tool_result_ = {
-                        "tool_call_id": tool_id,
-                        "name": chat_with_agent,
-                        "role": "tool",
-                        "content": "Called chat_with_agent successfully",
-                    }
-                self.add_message(tool_result_)
-                return ToolResponseWrapper(agent_handoff_result=handoff_result)
-
             tool_func = self.tool_manager.tools[tool_name]
             task = asyncio.create_task(self.run_tool(tool_func, **kwargs))
             tasks.append((task, tool_id, tool_name))
@@ -237,6 +200,8 @@ class Agent:
         for task, tool_id, tool_name in tasks:
             try:
                 tool_result = await asyncio.wait_for(task, timeout=timeout)
+                if isinstance(tool_result, AgentTransfer):
+                    return ToolResponseWrapper(agent_transfer=tool_result)
                 base64_image = tool_result.base64_image
                 if base64_image:
                     base64_images.append(base64_image)
@@ -325,7 +290,7 @@ class Agent:
         else:
             return ToolMessageParam(tool_call_id=tool_id, name=tool_name, role="tool", content=error_message)
 
-    def build_next_agent_context(self, to_agent: str, last_message: str) -> List[Dict]:
+    def build_context_for_next_agent(self) -> str:
         history = copy.deepcopy(self._get_message_params())
         # remove the transfer tool call and append message from calling agent
         # in this way, we keep the conversation cohensive with less noise
@@ -335,14 +300,7 @@ class Agent:
         messages_content = ",".join([str(msg) for msg in messages])
 
         messages_content = ",".join([str(msg) for msg in messages])
-        history = MessageParam(
-            role="assistant",
-            content=f"This is context from agent {self.id}: <background>{messages_content}</background> \n\nThe following message is from {self.id} to {to_agent}",
-        )
-        from_agent_message = MessageParam(role="assistant", content=last_message, name=self.id)
-        messages.append(from_agent_message)
-        messages = [history, from_agent_message]
-        return messages
+        return messages_content
 
 
 def _maybe_prepend_system_tool_result(result: ToolResult, result_text: str):

@@ -27,6 +27,7 @@ class SystemMessageBuilder:
         if self.config.is_primary:
             instruction += self._get_self_reflection_instructions()
             instruction += self._get_primary_agent_instructions()
+            instruction += self._get_startup_instruction()
 
         # Add other agents info if available
         if self.other_agents_info:
@@ -155,12 +156,6 @@ class SystemMessageBuilder:
 - When detecting patterns, document them for future reference
 - Before long breaks in conversation, save session summary
 
-4. Memory Search Best Practices:
-- Use specific keywords for targeted recall
-- Include temporal markers when relevant (e.g., "last week", "recent")
-- Combine multiple search terms for better results
-- Review both exact and semantically similar matches
-
 Remember: Being proactive with memory management helps maintain conversation continuity and improves the quality of assistance across sessions."""
 
     def _get_primary_agent_instructions(self) -> str:
@@ -169,13 +164,20 @@ Remember: Being proactive with memory management helps maintain conversation con
 You are {self.agent_id}, a primary agent in a multi-agent system. Please follow these core rules:
 
 1. To communicate with other agents:
-   - Use the `chat_with_agent` tool
+   - Use the `create_agent_handoff` tool
    - Specify the target agent's ID
    - System automatically includes last 3 messages as context
    - Provide additional context if the recent messages alone are insufficient
 
-2. All responses not using `chat_with_agent` will be sent directly to the user, so please format them accordingly
+2. All responses not using `create_agent_handoff` will be sent directly to the user, so please format them accordingly
 """
+
+    def _get_startup_instruction(self) -> str:
+        """Get startup instruction"""
+        return """
+1. Recap the goal and where the work left: it might good idea to recap what work left from last session.
+2. Familiar with task or project context: if you don't have those context, as a first step, it might be a good idea to explore the repo to familiarize yourself with its latesst structure.
+        """
 
     def _get_conversation_context(self) -> str:
         """Get the conversation context information."""

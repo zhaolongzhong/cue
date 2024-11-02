@@ -20,7 +20,7 @@ class TestClientManager:
             is_primary=True,
             instruction="Your name is agent_a",
             model=default_chat_model,
-            tools=[],
+            tools=[Tool.Coordinate],
             is_test=True,
         )
 
@@ -28,13 +28,11 @@ class TestClientManager:
             id="agent_b",
             instruction="Your name is agent_b",
             model=default_chat_model,
-            tools=[Tool.Edit],
+            tools=[Tool.Edit, Tool.Coordinate],
             is_test=True,
         )
         agent_a = agent_manager.register_agent(agent_a_config)
-        agent_b = agent_manager.register_agent(agent_b_config)
-        agent_a.add_tool_to_agent(agent_a.chat_with_agent)
-        agent_b.add_tool_to_agent(agent_b.chat_with_agent)
+        agent_manager.register_agent(agent_b_config)
 
         try:
             file_name = "fibo.py"

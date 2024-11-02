@@ -1,0 +1,27 @@
+{
+    "type": "function",
+    "function": {
+        "name": "coordinate",
+        "description": "agent coordination tool",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "enum": ["transfer"],
+                    "description": "The commands to run. Allowed options are: `transfer`."
+                },
+                "to_agent_id": {
+                    "type": "string",
+                    "description": "Required parameter of `transfer` command. The ID of the agent to chat with"
+                },
+                "message": {
+                    "type": "string",
+                    "description": "Required parameter of `transfer` command,. The message sent to the to agent"
+                }
+    
+            },
+            "required": ["to_agent_id", "message"]
+        }
+    }
+}

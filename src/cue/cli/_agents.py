@@ -14,7 +14,7 @@ main_agent = AgentConfig(
     model=ChatModel.GPT_4O_MINI.id,
     temperature=0.8,
     max_tokens=2000,
-    tools=[Tool.Edit, Tool.Memory],
+    tools=[Tool.Edit, Tool.Memory, Tool.Coordinate],
     enable_external_memory=True,
 )
 

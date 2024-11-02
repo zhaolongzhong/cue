@@ -9,7 +9,7 @@ from .schemas import (
     AgentConfig,
     RunMetadata,
     MessageParam,
-    AgentHandoffResult,
+    AgentTransfer,
     CompletionResponse,
     ConversationContext,
     ToolResponseWrapper,
@@ -91,27 +91,28 @@ class AgentManager:
                     return response
                 else:
                     # auto switch to primary agent
-                    hand_off_result = await self.active_agent.chat_with_agent(
-                        self.primary_agent.id, response.get_text()
+                    context = self.active_agent.build_context_for_next_agent()
+                    transfer = AgentTransfer(
+                        to_agent_id=self.primary_agent.id, message=response.get_text(), context=context
                     )
-                    await self._handle_hand_off_result(hand_off_result)
+                    await self._handle_transfer(transfer)
                     continue
 
-            tool_result_wrapper = await self.active_agent.process_tools_with_timeout(
+            tool_result = await self.active_agent.process_tools_with_timeout(
                 tool_calls=tool_calls, timeout=30, author=response.author
             )
-            if isinstance(tool_result_wrapper, ToolResponseWrapper):
-                if tool_result_wrapper.agent_handoff_result:
-                    hand_off_result = tool_result_wrapper.agent_handoff_result
-                    await self._handle_hand_off_result(hand_off_result)
+            if isinstance(tool_result, ToolResponseWrapper):
+                if tool_result.agent_transfer:
+                    transfer = tool_result.agent_transfer
+                    await self._handle_transfer(transfer)
                     # pick up new active agent in next loop
                     continue
                 else:
-                    self.active_agent.add_message(tool_result_wrapper)
-                    if tool_result_wrapper.base64_images:
+                    self.active_agent.add_message(tool_result)
+                    if tool_result.base64_images:
                         tool_result_content = {
                             "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{tool_result_wrapper.base64_images[0]}"},
+                            "image_url": {"url": f"data:image/jpeg;base64,{tool_result.base64_images[0]}"},
                         }
 
                         contents = [
@@ -122,28 +123,36 @@ class AgentManager:
                         message_param = {"role": "user", "content": contents}
                         self.active_agent.add_message(message_param)
             else:
-                raise Exception(f"Unexpected response: {tool_result_wrapper}")
+                raise Exception(f"Unexpected response: {tool_result}")
 
         return response
 
-    async def _handle_hand_off_result(self, hand_off_result: AgentHandoffResult) -> None:
-        """Process agent handoff by updating active agent and transferring context.
+    async def _handle_transfer(self, agent_transfer: AgentTransfer) -> None:
+        """Process agent transfer by updating active agent and transferring context.
 
         Args:
-            hand_off_result: Contains target agent ID and context to transfer
+            agent_transfer: Contains target agent ID and context to transfer
 
         The method clears previous memory and transfers either single or list context
         to the new active agent.
         """
-        self.active_agent = self._agents[hand_off_result.to_agent_id]
+        from_agent_id = self.active_agent.id
+        if not agent_transfer.context:
+            agent_transfer.context = self.active_agent.build_context_for_next_agent()
+
+        self.active_agent = self._agents[agent_transfer.to_agent_id]
         self.active_agent.conversation_context = ConversationContext(
-            participants=[hand_off_result.from_agent_id, hand_off_result.to_agent_id]
+            participants=[from_agent_id, agent_transfer.to_agent_id]
         )
-        if isinstance(hand_off_result.context, List):
-            for msg in hand_off_result.context:
-                self.active_agent.add_message(msg)  # TODO: should we combine them as single message in the first place
-        else:
-            self.active_agent.add_message(hand_off_result.context)
+        history = MessageParam(
+            role="assistant",
+            content=f"{from_agent_id}: here is context <background>{agent_transfer.context}</background>",
+        )
+        transfer_message = MessageParam(role="assistant", content=agent_transfer.message, name=from_agent_id)
+
+        messages = [history, transfer_message]
+        for msg in messages:
+            self.active_agent.add_message(msg)
 
     def should_continue_run(self, turns_count: int, run_metadata: RunMetadata):
         """
@@ -205,7 +214,7 @@ class AgentManager:
         agent = Agent(config=config, agent_manager=self)
         self._agents[agent.config.id] = agent
         logger.info(
-            f"register_agent {agent.config.id} (name: {config.id}), available agents: {list(self._agents.keys())}"
+            f"register_agent {agent.config.id} (name: {config.id}), tool: {config.tools} available agents: {list(self._agents.keys())}"
         )
         if config.is_primary:
             self.primary_agent = agent
@@ -244,7 +253,7 @@ class AgentManager:
 
     def list_agents(self, exclude: List[str] = []) -> List[dict[str, str]]:
         return [
-            {"id_or_name": agent.id, "description": agent.description}
+            {"id": agent.id, "description": agent.description}
             for agent in self._agents.values()
             if agent.id not in exclude
         ]

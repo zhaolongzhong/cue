@@ -14,11 +14,11 @@ from .assistant_memory import AssistantMemory, AssistantMemoryCreate
 from .completion_request import CompletionRequest
 from .completion_respone import CompletionResponse, ToolCallToolUseBlock
 from .conversation_context import ConversationContext
-from .tool_response_wrapper import AgentHandoffResult, ToolResponseWrapper
+from .tool_response_wrapper import AgentTransfer, ToolResponseWrapper
 
 __all__ = [
     "AgentConfig",
-    "AgentHandoffResult",
+    "AgentTransfer",
     "AssistantMessage",
     "AssistantMemory",
     "AssistantMemoryCreate",

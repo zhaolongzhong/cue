@@ -26,8 +26,7 @@ class AsyncCueClient:
             max_tokens=2000,
             conversation_id="",
             tools=[
-                Tool.Read,
-                Tool.Write,
+                Tool.Edit,
                 Tool.Bash,
             ],
         )
@@ -51,7 +50,7 @@ class AsyncCueClient:
             self.agents[agent_id] = self.agent_manager.register_agent(config)
             if len(configs) > 1:
                 # only add it when there are multiple agents
-                self.agents[agent_id].add_tool_to_agent(self.agents[agent_id].chat_with_agent)
+                self.agents[agent_id].add_tool_to_agent(self.agents[agent_id].create_agent_handoff)
 
         if not self.agents:
             # Fallback to default configuration if no agents are configured

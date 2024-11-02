@@ -45,11 +45,6 @@ class CLI:
     def _config_agents(self) -> str:
         # Register all agents
         self.agents = {config.id: self.agent_manager.register_agent(config) for _, config in self.configs.items()}
-
-        # Add transfer tool to all agents
-        if len(self.agents) > 0:
-            for agent in self.agents.values():
-                agent.add_tool_to_agent(agent.chat_with_agent)
         return self.active_agent_id
 
     async def _get_user_input_async(self, prompt: str):

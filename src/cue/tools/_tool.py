@@ -9,10 +9,9 @@ from .email import EmailTool
 from .browse import BrowseTool
 from .memory import MemoryTool
 from .bash_tool import BashTool
-from .read_file import ReadTool
+from .coordinate import CoordinateTool
 from .read_image import ReadImageTool
 from .run_script import PythonRunner
-from .write_to_file import WriteTool
 from .utils.function_utils import get_definition_by_model
 from .utils.function_to_json import function_to_json
 from ..memory.memory_service_client import MemoryServiceClient
@@ -21,8 +20,6 @@ logger = logging.getLogger(__name__)
 
 
 class Tool(Enum):
-    Read = ReadTool.name
-    Write = WriteTool.name
     Bash = BashTool.name
     Edit = EditTool.name
     Python = PythonRunner.name
@@ -31,13 +28,12 @@ class Tool(Enum):
     Drive = GoogleDriveTool.name
     Image = ReadImageTool.name
     Memory = MemoryTool.name
+    Coordinate = CoordinateTool.name
 
 
 class ToolManager:
     def __init__(self, memory_service: Optional[MemoryServiceClient] = None):
         self.tools: Dict[str, BaseTool] = {
-            Tool.Read.value: ReadTool(),
-            Tool.Write.value: WriteTool(),
             Tool.Bash.value: BashTool(),
             Tool.Edit.value: EditTool(),
             Tool.Python.value: PythonRunner(),
@@ -47,6 +43,7 @@ class ToolManager:
             Tool.Drive.value: GoogleDriveTool(),
             Tool.Image.value: ReadImageTool(),
             Tool.Memory.value: MemoryTool(memory_service),
+            Tool.Coordinate.value: CoordinateTool(),
         }
         self._definition_cache: Dict[str, dict] = {}
 
@@ -98,7 +95,7 @@ class ToolManager:
         func_definitions = []
         for tool_id in tools_to_iterate:
             if tool_id not in self.tools:
-                continue
+                raise ValueError(f"Unsupported tool type: {type(tool)}, make sure to register first in ToolManager")
 
             cached_def = self._get_cached_definition(tool_id, model)
             if cached_def is not None:

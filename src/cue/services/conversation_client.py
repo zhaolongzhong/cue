@@ -66,4 +66,6 @@ class ConversationClient(ResourceClient):
         response = await self._http.request(
             "GET", f"/assistants/{assistant_id}/conversations?skip={skip}&limit={limit}"
         )
+        if response is None:
+            return []
         return [Conversation(**conv) for conv in response]

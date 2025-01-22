@@ -7,12 +7,14 @@ class ChatModel(Enum):
     CLAUDE_3_OPUS_20240229 = ("claude-3-opus-20240229", True, "anthropic")
     CLAUDE_3_5_SONNET_20241022 = ("claude-3-5-sonnet-20241022", True, "anthropic")
     CLAUDE_3_5_HAIKU_20241022 = ("claude-3-5-haiku-20241022", True, "anthropic")
+    CLAUDE_3_7_SONNET_20241022 = ("claude-3-7-sonnet-20250219", True, "anthropic")
 
     # Gemini https://ai.google.dev/gemini-api/docs/models/gemini#model-variations
     # https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-gemini-using-openai-library#supported_models
     GEMINI_1_5_FLASH = ("gemini-1.5-flash", True, "google")
     GEMINI_EXP_1206 = ("gemini-exp-1206", True, "google")
     GEMINI_1_5_PRO = ("gemini-1.5-pro", True, "google")
+    GEMINI_2_0_FLASH = ("gemini-2.0-flash", True, "google")
 
     # OpenAI https://platform.openai.com/docs/models/overview
     GPT_4O = ("gpt-4o", True, "openai")
@@ -21,6 +23,8 @@ class ChatModel(Enum):
     O1_MINI = ("o1-mini", False, "openai")
     O1_PREVIEW = ("o1-preview", False, "openai")
     O3_MINI = ("o3-mini", True, "openai")
+
+    DEEP_SEEK_R1_7B = ("deepseek-r1:7b", False, "ollama")
 
     def __init__(self, id, tool_use_support, provider):
         self.id = id

@@ -146,7 +146,7 @@ class ServiceManager:
         """Establish connection to the service"""
 
         if not self.is_server_available:
-            logger.error("Server is not available.")
+            logger.warning("Server is not available.")
             return
         await self._ws_manager.connect()
 
